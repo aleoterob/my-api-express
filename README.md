@@ -54,6 +54,7 @@ verifyToken(token: string): TokenPayload
 ```
 
 **Features:**
+
 - Automatic expiration management (configurable via `TOKEN_EXPIRATION_MINUTES`)
 - Type-safe payload validation
 - Environment variable validation for `JWT_SECRET`
@@ -63,10 +64,11 @@ verifyToken(token: string): TokenPayload
 Protects routes by verifying JWT tokens from cookies:
 
 ```typescript
-authMiddleware(req, res, next)
+authMiddleware(req, res, next);
 ```
 
 **How it works:**
+
 1. Extracts `access_token` from httpOnly cookies
 2. Verifies the token using `verifyToken()`
 3. Attaches the decoded payload to `req.user`
@@ -78,14 +80,15 @@ When a user logs in, the JWT token is set as an httpOnly cookie:
 
 ```typescript
 res.cookie('access_token', token, {
-  httpOnly: true,        // Not accessible via JavaScript (XSS protection)
-  secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
-  sameSite: 'strict',     // CSRF protection
-  maxAge: getCookieMaxAge()  // Synchronized with token expiration
+  httpOnly: true, // Not accessible via JavaScript (XSS protection)
+  secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+  sameSite: 'strict', // CSRF protection
+  maxAge: getCookieMaxAge(), // Synchronized with token expiration
 });
 ```
 
 **Security Benefits:**
+
 - **httpOnly**: Prevents JavaScript access, protecting against XSS attacks
 - **secure**: Ensures cookies are only sent over HTTPS in production
 - **sameSite: 'strict'**: Prevents CSRF attacks by blocking cross-site requests
@@ -103,6 +106,7 @@ Token expiration is centrally managed:
 ### Authentication Flow
 
 1. **Login** (`POST /api/auth/login`):
+
    - User provides email and password
    - Credentials are validated against the database
    - JWT token is generated with `sub` (user ID) and `role` claims
@@ -110,6 +114,7 @@ Token expiration is centrally managed:
    - User data is returned in response
 
 2. **Protected Routes**:
+
    - Client makes request (cookie is automatically sent)
    - `authMiddleware` extracts and verifies token
    - If valid, `req.user` is populated and request proceeds
@@ -144,13 +149,14 @@ A custom error class that extends the native `Error` class:
 
 ```typescript
 class AppError extends Error {
-  statusCode: number;      // HTTP status code
-  code: string;           // Application-specific error code
+  statusCode: number; // HTTP status code
+  code: string; // Application-specific error code
   isOperational: boolean; // Distinguishes operational errors from bugs
 }
 ```
 
 **Benefits:**
+
 - Structured error information
 - Easy to identify error types
 - Consistent error format
@@ -169,7 +175,7 @@ export const ERROR_MESSAGES = {
   USER: {
     NOT_FOUND: 'Usuario no encontrado',
     // ... more messages
-  }
+  },
   // ... more categories
 };
 
@@ -181,6 +187,7 @@ export const ERROR_CODES = {
 ```
 
 **Benefits:**
+
 - Single source of truth for error messages
 - Easy to maintain and update
 - Consistent error codes for client-side handling
@@ -191,15 +198,17 @@ export const ERROR_CODES = {
 A global error handler that processes all errors:
 
 ```typescript
-errorMiddleware(err, req, res, next)
+errorMiddleware(err, req, res, next);
 ```
 
 **Behavior:**
+
 - **AppError instances**: Returns structured error response with status code, message, and error code
 - **Unexpected errors**: Returns generic 500 error, with stack trace only in development
 - **Consistent format**: All errors follow the same response structure
 
 **Response Format:**
+
 ```json
 {
   "success": false,
@@ -219,10 +228,11 @@ Wraps asynchronous route handlers to automatically catch errors:
 asyncHandler(async (req, res) => {
   // Your async code here
   // Any thrown error is automatically passed to error middleware
-})
+});
 ```
 
 **Benefits:**
+
 - Eliminates repetitive try/catch blocks
 - Ensures all errors reach the error middleware
 - Cleaner, more readable controller code
@@ -230,6 +240,7 @@ asyncHandler(async (req, res) => {
 ### Error Handling Flow
 
 1. **Controller throws AppError**:
+
    ```typescript
    throw new AppError(
      ERROR_MESSAGES.AUTH.INVALID_CREDENTIALS,
@@ -239,9 +250,11 @@ asyncHandler(async (req, res) => {
    ```
 
 2. **AsyncHandler catches error**:
+
    - Automatically passes error to Express error middleware
 
 3. **Error Middleware processes error**:
+
    - Checks if error is `AppError` instance
    - Returns structured JSON response
    - Logs unexpected errors
@@ -274,16 +287,19 @@ router.post('/login', async (req, res) => {
 });
 
 // After (centralized error handling)
-router.post('/login', asyncHandler(async (req, res) => {
-  if (!email) {
-    throw new AppError(
-      ERROR_MESSAGES.AUTH.MISSING_EMAIL,
-      400,
-      ERROR_CODES.AUTH_MISSING_CREDENTIALS
-    );
-  }
-  // ... rest of code - errors automatically handled
-}));
+router.post(
+  '/login',
+  asyncHandler(async (req, res) => {
+    if (!email) {
+      throw new AppError(
+        ERROR_MESSAGES.AUTH.MISSING_EMAIL,
+        400,
+        ERROR_CODES.AUTH_MISSING_CREDENTIALS
+      );
+    }
+    // ... rest of code - errors automatically handled
+  })
+);
 ```
 
 ### Benefits of Centralized Error Handling
@@ -307,6 +323,7 @@ NODE_ENV=development
 ```
 
 **JWT_SECRET**: Generate a secure random string (recommended: 64+ characters). You can use:
+
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
