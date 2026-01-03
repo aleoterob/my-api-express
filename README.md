@@ -369,7 +369,7 @@ npm start
 - `GET /api/user/id/:id` - Get user by ID
 - `GET /api/user/email/:email` - Get user by email
 - `POST /api/user` - Create user
-- `POST /api/user/register` - Register new user (public)
+- `POST /api/user/register` - Register new user (public) -> Not protected
 - `PUT /api/user/:id` - Update user
 - `PATCH /api/user/:id` - Update user (partial)
 - `DELETE /api/user/:id` - Delete user
