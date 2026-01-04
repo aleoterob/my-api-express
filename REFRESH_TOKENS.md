@@ -19,7 +19,7 @@ Este proyecto implementa un sistema completo de autenticación con refresh token
 
 #### `POST /api/auth/login`
 
-- Genera access token (2 minutos) + refresh token (7 días)
+- Genera access token (15 minutos) + refresh token (7 días)
 - Ambos tokens se envían como httpOnly cookies
 - Almacena refresh token hasheado en BD con metadatos
 
@@ -50,7 +50,7 @@ Este proyecto implementa un sistema completo de autenticación con refresh token
 
 **Cookies establecidas:**
 
-- `access_token`: httpOnly, secure, sameSite=lax, maxAge=10min
+- `access_token`: httpOnly, secure, sameSite=lax, maxAge=15min
 - `refresh_token`: httpOnly, secure, sameSite=lax, maxAge=7días
 
 #### `POST /api/auth/refresh`
@@ -125,8 +125,8 @@ Si se intenta usar un token ya revocado:
 **Expiración de tokens** (`src/config/constants.ts`):
 
 ```typescript
-export const TOKEN_EXPIRATION_MINUTES = 10; // Access token
-export const REFRESH_TOKEN_EXPIRATION_MINUTES = 10080; // 7 días
+export const TOKEN_EXPIRATION_MINUTES = 15; // Access token: 15 minutos
+export const REFRESH_TOKEN_EXPIRATION_MINUTES = 10080; // Refresh token: 7 días
 ```
 
 **Variables de entorno requeridas**:

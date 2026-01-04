@@ -39,7 +39,7 @@ src/
 
 This project implements a robust JWT authentication system using **httpOnly cookies** with **automatic refresh token rotation** for enhanced security. The system uses two types of tokens:
 
-- **Access Token**: Short-lived (2 minutes) JWT for API authentication
+- **Access Token**: Short-lived (15 minutes) JWT for API authentication
 - **Refresh Token**: Long-lived (7 days) token for obtaining new access tokens
 
 Tokens are never exposed to client-side JavaScript, protecting against XSS attacks. The refresh token rotation mechanism provides additional security by invalidating old tokens and detecting potential token theft.
@@ -103,10 +103,14 @@ res.cookie('access_token', token, {
 
 Token expiration is centrally managed:
 
-- **Configuration**: `src/config/constants.ts` - `TOKEN_EXPIRATION_MINUTES = 2`
+- **Configuration**: `src/config/constants.ts`:
+  - `TOKEN_EXPIRATION_MINUTES = 15` (access token)
+  - `REFRESH_TOKEN_EXPIRATION_MINUTES = 10080` (refresh token - 7 days)
 - **Helpers**: `src/utils/auth.ts` - Converts minutes to required formats:
-  - `getTokenExpirationString()`: Returns `"2m"` for JWT `expiresIn`
+  - `getTokenExpirationString()`: Returns `"15m"` for JWT `expiresIn`
   - `getCookieMaxAge()`: Returns milliseconds for cookie `maxAge`
+  - `getRefreshTokenExpirationDate()`: Returns Date for refresh token expiration
+  - `getRefreshTokenCookieMaxAge()`: Returns milliseconds for refresh cookie
 
 ### Refresh Token System
 
@@ -144,7 +148,7 @@ CREATE UNIQUE INDEX idx_refresh_tokens_token_hash ON auth.refresh_tokens(token_h
 
    - User provides email and password
    - Credentials are validated against the database
-   - **Access token** (JWT, 2 min) is generated with `sub` (user ID) and `role` claims
+   - **Access token** (JWT, 15 min) is generated with `sub` (user ID) and `role` claims
    - **Refresh token** (random 32 bytes, 7 days) is generated and hashed
    - Both tokens are set as httpOnly cookies
    - Refresh token is stored in database with metadata (user-agent, IP)
@@ -220,7 +224,7 @@ res.cookie('access_token', token, {
   httpOnly: true, // Not accessible via JavaScript
   secure: process.env.NODE_ENV === 'production', // HTTPS only
   sameSite: 'lax', // CSRF protection
-  maxAge: 2 * 60 * 1000, // 2 minutes
+  maxAge: 15 * 60 * 1000, // 15 minutes
 });
 
 res.cookie('refresh_token', refreshToken, {
@@ -488,7 +492,8 @@ npm start
 - **Secure Cookies**: HTTPS-only in production
 - **SameSite Lax**: CSRF protection
 - **Password Hashing**: bcrypt with salt rounds
-- **Short-lived Access Tokens**: 2-minute expiration reduces attack window
+- **Short-lived Access Tokens**: 15-minute expiration reduces attack window
+- **Long-lived Refresh Tokens**: 7-day expiration for seamless user experience
 - **Refresh Token Rotation**: Automatic rotation on every use
 - **Token Reuse Detection**: Revokes all sessions if stolen token is detected
 - **Token Hashing**: SHA-256 hashing before database storage

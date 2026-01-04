@@ -1,2 +1,2 @@
-export const TOKEN_EXPIRATION_MINUTES = 2;
-export const REFRESH_TOKEN_EXPIRATION_MINUTES = 3; // 3 minutos
+export const TOKEN_EXPIRATION_MINUTES = 15; // 15 minutos
+export const REFRESH_TOKEN_EXPIRATION_MINUTES = 10080; // 7 días
