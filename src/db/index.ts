@@ -2,11 +2,13 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as profilesSchema from './schema/public/profiles';
 import { users, authSchema } from './schema/auth/users';
+import { refreshTokens } from './schema/auth/refresh_tokens';
 import * as relations from './relations';
 
 const schema = {
   ...profilesSchema,
   users,
+  refreshTokens,
   authSchema,
 };
 
@@ -26,3 +28,4 @@ export const db = drizzle(sql, {
 });
 
 export * from './schema/public/profiles';
+export * from './schema/auth/refresh_tokens';

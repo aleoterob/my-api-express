@@ -10,11 +10,22 @@
 
 import { relations } from 'drizzle-orm';
 import { profiles } from './schema/public/profiles';
+import { users } from './schema/auth/users';
+import { refreshTokens } from './schema/auth/refresh_tokens';
 
-/**
- * PROFILES RELATIONS
- * Un perfil está relacionado con auth.users a través de foreign key (profiles.id = auth.users.id)
- * Esta relación no se puede expresar en Drizzle porque auth.users está en otro schema,
- * pero existe a nivel de base de datos con ON DELETE CASCADE
- */
 export const profilesRelations = relations(profiles, () => ({}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  refreshTokens: many(refreshTokens),
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id],
+  }),
+  replacedBy: one(refreshTokens, {
+    fields: [refreshTokens.replacedByToken],
+    references: [refreshTokens.id],
+  }),
+}));

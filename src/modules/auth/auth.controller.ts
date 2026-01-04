@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { getCookieMaxAge } from '../../utils/auth';
+import { getCookieMaxAge, getRefreshTokenCookieMaxAge } from '../../utils/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { AppError } from '../../errors/AppError';
 import { ERROR_MESSAGES, ERROR_CODES } from '../../config/errors';
@@ -31,14 +31,32 @@ export const login = asyncHandler(
       );
     }
 
-    const result = await authService.login(email, password);
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = (req.ip || req.socket.remoteAddress) as
+      | string
+      | undefined;
+
+    const result = await authService.login(
+      email,
+      password,
+      userAgent,
+      ipAddress
+    );
 
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: getCookieMaxAge(),
+    });
+
+    res.cookie('refresh_token', result.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: getRefreshTokenCookieMaxAge(),
     });
 
     res.json({
@@ -51,6 +69,90 @@ export const login = asyncHandler(
         },
         profile: result.profile,
       },
+    });
+  }
+);
+
+export const refresh = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const cookies = req.cookies as { refresh_token?: string } | undefined;
+    const refreshToken = cookies?.refresh_token;
+
+    if (!refreshToken) {
+      throw new AppError(
+        ERROR_MESSAGES.AUTH.REFRESH_TOKEN_NOT_FOUND,
+        401,
+        ERROR_CODES.AUTH_REFRESH_TOKEN_NOT_FOUND
+      );
+    }
+
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = (req.ip || req.socket.remoteAddress) as
+      | string
+      | undefined;
+
+    const result = await authService.refreshTokens(
+      refreshToken,
+      userAgent,
+      ipAddress
+    );
+
+    res.cookie('access_token', result.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: getCookieMaxAge(),
+    });
+
+    res.cookie('refresh_token', result.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: getRefreshTokenCookieMaxAge(),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: result.user.role,
+        },
+        profile: result.profile,
+      },
+    });
+  }
+);
+
+export const logout = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const cookies = req.cookies as { refresh_token?: string } | undefined;
+    const refreshToken = cookies?.refresh_token;
+
+    if (refreshToken) {
+      await authService.logout(refreshToken);
+    }
+
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+
+    res.clearCookie('refresh_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+
+    res.json({
+      success: true,
+      message: 'Logout exitoso',
     });
   }
 );

@@ -33,11 +33,16 @@ src/
 └── utils/           # Utility functions (JWT, auth helpers, async handler)
 ```
 
-## JWT Implementation
+## JWT Implementation with Refresh Token Rotation
 
 ### Overview
 
-This project implements JWT authentication using **httpOnly cookies** for enhanced security. Tokens are never exposed to client-side JavaScript, protecting against XSS attacks.
+This project implements a robust JWT authentication system using **httpOnly cookies** with **automatic refresh token rotation** for enhanced security. The system uses two types of tokens:
+
+- **Access Token**: Short-lived (2 minutes) JWT for API authentication
+- **Refresh Token**: Long-lived (7 days) token for obtaining new access tokens
+
+Tokens are never exposed to client-side JavaScript, protecting against XSS attacks. The refresh token rotation mechanism provides additional security by invalidating old tokens and detecting potential token theft.
 
 ### Key Components
 
@@ -103,27 +108,128 @@ Token expiration is centrally managed:
   - `getTokenExpirationString()`: Returns `"2m"` for JWT `expiresIn`
   - `getCookieMaxAge()`: Returns milliseconds for cookie `maxAge`
 
-### Authentication Flow
+### Refresh Token System
+
+#### Database Schema
+
+Refresh tokens are stored in a dedicated `refresh_tokens` table in the `auth` schema:
+
+```sql
+CREATE TABLE auth.refresh_tokens (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  revoked_at TIMESTAMP WITH TIME ZONE,
+  replaced_by_token UUID REFERENCES auth.refresh_tokens(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  user_agent VARCHAR(500),
+  ip_address VARCHAR(45)
+);
+
+CREATE INDEX idx_refresh_tokens_user_id ON auth.refresh_tokens(user_id);
+CREATE UNIQUE INDEX idx_refresh_tokens_token_hash ON auth.refresh_tokens(token_hash);
+```
+
+**Key Features:**
+
+- **Token Hashing**: Tokens are hashed (SHA-256) before storage for security
+- **Rotation Tracking**: `replaced_by_token` creates an audit trail of token rotations
+- **Revocation**: `revoked_at` tracks when a token is invalidated
+- **Audit Fields**: `user_agent` and `ip_address` for security monitoring
+
+#### Authentication Flow
 
 1. **Login** (`POST /api/auth/login`):
 
    - User provides email and password
    - Credentials are validated against the database
-   - JWT token is generated with `sub` (user ID) and `role` claims
-   - Token is set as httpOnly cookie
+   - **Access token** (JWT, 2 min) is generated with `sub` (user ID) and `role` claims
+   - **Refresh token** (random 32 bytes, 7 days) is generated and hashed
+   - Both tokens are set as httpOnly cookies
+   - Refresh token is stored in database with metadata (user-agent, IP)
    - User data is returned in response
 
 2. **Protected Routes**:
 
-   - Client makes request (cookie is automatically sent)
-   - `authMiddleware` extracts and verifies token
+   - Client makes request (cookies are automatically sent)
+   - `authMiddleware` extracts and verifies **access token**
    - If valid, `req.user` is populated and request proceeds
-   - If invalid, 401 Unauthorized is returned
+   - If invalid/expired, 401 Unauthorized is returned
 
-3. **Token Claims**:
+3. **Token Refresh** (`POST /api/auth/refresh`) - **Automatic Rotation**:
+
+   - Client sends expired access token + valid refresh token
+   - Backend validates refresh token:
+     - Checks if token exists and is not revoked
+     - Validates expiration date
+     - **Security Check**: If token was already used (revoked), revokes ALL user tokens
+   - Generates NEW access token + NEW refresh token
+   - **Rotation**: Old refresh token is marked as `revoked_at` and linked to new token via `replaced_by_token`
+   - New tokens are sent as httpOnly cookies
+   - Client continues seamlessly without re-login
+
+4. **Logout** (`POST /api/auth/logout`):
+
+   - Marks refresh token as revoked in database
+   - Clears both cookies
+   - Token remains in database for audit purposes
+
+5. **Token Claims**:
    - `sub`: User ID (subject)
    - `role`: User role (e.g., 'user', 'admin')
    - `exp`: Expiration timestamp (automatically added by JWT)
+
+#### Security Features
+
+**1. Token Rotation**
+
+Every time a refresh token is used, it's automatically replaced:
+
+```
+Old Token (revoked) → New Token (active)
+                ↓
+        replaced_by_token
+```
+
+This creates an audit trail and limits the window for token theft.
+
+**2. Reuse Detection**
+
+If a revoked token is used (potential theft), ALL user tokens are revoked:
+
+```typescript
+if (storedToken.revokedAt) {
+  await revokeAllUserRefreshTokens(userId);
+  throw new Error('Token reuse detected - all sessions revoked');
+}
+```
+
+**3. Token Storage Security**
+
+- Tokens are hashed (SHA-256) before database storage
+- Only hash comparison, never plain text storage
+- Random token generation using `crypto.randomBytes(32)`
+
+**4. httpOnly Cookies**
+
+Both tokens use httpOnly cookies:
+
+```typescript
+res.cookie('access_token', token, {
+  httpOnly: true, // Not accessible via JavaScript
+  secure: process.env.NODE_ENV === 'production', // HTTPS only
+  sameSite: 'lax', // CSRF protection
+  maxAge: 2 * 60 * 1000, // 2 minutes
+});
+
+res.cookie('refresh_token', refreshToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
+```
 
 ### Usage Example
 
@@ -360,7 +466,9 @@ npm start
 
 ### Authentication
 
-- `POST /api/auth/login` - Login (returns httpOnly cookie with JWT)
+- `POST /api/auth/login` - Login (returns httpOnly cookies with access + refresh tokens)
+- `POST /api/auth/refresh` - Refresh tokens (automatic rotation)
+- `POST /api/auth/logout` - Logout (revokes refresh token)
 
 ### Users (Protected)
 
@@ -376,12 +484,23 @@ npm start
 
 ## Security Features
 
-- **httpOnly Cookies**: Prevents XSS attacks
+- **httpOnly Cookies**: Prevents XSS attacks (tokens not accessible via JavaScript)
 - **Secure Cookies**: HTTPS-only in production
-- **SameSite Strict**: CSRF protection
+- **SameSite Lax**: CSRF protection
 - **Password Hashing**: bcrypt with salt rounds
-- **Token Expiration**: Configurable token lifetime
+- **Short-lived Access Tokens**: 2-minute expiration reduces attack window
+- **Refresh Token Rotation**: Automatic rotation on every use
+- **Token Reuse Detection**: Revokes all sessions if stolen token is detected
+- **Token Hashing**: SHA-256 hashing before database storage
+- **Audit Trail**: Tracks token rotations, user-agent, and IP addresses
 - **Type Safety**: TypeScript prevents common security issues
+
+## Documentation
+
+For detailed information about the refresh token system:
+
+- **Server Implementation**: See [REFRESH_TOKENS.md](./REFRESH_TOKENS.md) for complete server-side documentation
+- **Client Integration**: See [jwt-api-express-client](../jwt-api-express-client) for frontend implementation
 
 ## License
 
