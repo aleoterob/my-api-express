@@ -506,6 +506,8 @@ For detailed information about the refresh token system:
 
 - **Server Implementation**: See [REFRESH_TOKENS.md](./REFRESH_TOKENS.md) for complete server-side documentation
 - **Client Integration**: See [jwt-api-express-client](../jwt-api-express-client) for frontend implementation
+- **Swagger Documentation**
+- `http://localhost:3001/api-docs/#/User/get_api_user`
 
 ## License
 
